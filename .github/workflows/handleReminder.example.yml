@@ -1,0 +1,24 @@
+name: Handle Reminder
+
+on:
+  issue_comment:
+    types:
+      - created
+  workflow_dispatch:
+  schedule:
+    - cron: '5 0 * * *'
+
+jobs:
+  handle-reminder:
+    runs-on: ubuntu-latest
+
+    permissions:
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Handle reminder labels
+        uses: iobroker-bot-orga/action-handle-reminder@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          process-all: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}

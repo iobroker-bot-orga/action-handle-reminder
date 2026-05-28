@@ -1,0 +1,34 @@
+name: 'Handle Reminder'
+description: 'Handle reminder comments by assigning/removing date labels on issues and pull requests'
+author: 'ioBroker Bot Organization'
+
+branding:
+  icon: 'clock'
+  color: 'blue'
+
+inputs:
+  github-token:
+    description: 'GitHub token with permission to read/write issues and labels'
+    required: true
+  process-all:
+    description: 'Process all open issues and pull requests instead of a single issue/PR'
+    required: false
+    default: 'false'
+  issue-number:
+    description: 'Optional issue/PR number to process explicitly'
+    required: false
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Handle reminder
+      shell: bash
+      env:
+        INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
+        INPUT_PROCESS_ALL: ${{ inputs.process-all }}
+        INPUT_ISSUE_NUMBER: ${{ inputs.issue-number }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_EVENT_NAME: ${{ github.event_name }}
+        GITHUB_EVENT_PATH: ${{ github.event_path }}
+      run: node "$GITHUB_ACTION_PATH/src/handleReminder.js"
