@@ -213,7 +213,7 @@ async function handleBrandNew(issues) {
                     await addLabelToIssue(label, issue);
 
                     if (nowTs < targetTs) {
-                        console.log(`    will merged after ${dateStr}`);
+                        console.log(`    will be merged after ${dateStr}`);
                         await updateLabel(label, `remind after ${dateStr}`, 'ffffff');
                     } else {
                         console.log(`    should be merged now (deadline ${dateStr})`);
