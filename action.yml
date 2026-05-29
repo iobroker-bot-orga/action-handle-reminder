@@ -18,17 +18,77 @@ inputs:
     description: 'Optional issue/PR number to process explicitly'
     required: false
     default: ''
+  mail_server_address:
+    description: 'Mail server address for sending reminder emails (e.g. mail.gmx.net). If not set, no email will be sent.'
+    required: false
+    default: ''
+  mail_server_port:
+    description: 'Mail server port'
+    required: false
+    default: ''
+  mail_secure:
+    description: 'Use SSL/TLS for the mail server connection'
+    required: false
+    default: ''
+  mail_username:
+    description: 'Mail server username'
+    required: false
+    default: ''
+  mail_password:
+    description: 'Mail server password'
+    required: false
+    default: ''
+  mail_subject:
+    description: 'Custom email subject. Defaults to "[iobroker-bot] reminder for repository <owner>/<repo>" when not set.'
+    required: false
+    default: ''
+  mail_to:
+    description: 'Email recipient address'
+    required: false
+    default: ''
+  mail_from:
+    description: 'Email sender address (e.g. "ioBroker Bot <bot@example.com>")'
+    required: false
+    default: ''
+
+outputs:
+  mail_subject:
+    description: 'Generated mail subject (only set when overdue items exist and mail is configured)'
+    value: ${{ steps.handle-reminder.outputs.mail_subject }}
+  mail_body:
+    description: 'Generated plain text mail body (only set when overdue items exist and mail is configured)'
+    value: ${{ steps.handle-reminder.outputs.mail_body }}
+  mail_html_body:
+    description: 'Generated HTML mail body (only set when overdue items exist and mail is configured)'
+    value: ${{ steps.handle-reminder.outputs.mail_html_body }}
 
 runs:
   using: 'composite'
   steps:
     - name: Handle reminder
+      id: handle-reminder
       shell: bash
       env:
         INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
         INPUT_PROCESS_ALL: ${{ inputs.process-all }}
         INPUT_ISSUE_NUMBER: ${{ inputs.issue-number }}
+        INPUT_MAIL_SERVER_ADDRESS: ${{ inputs.mail_server_address }}
+        INPUT_MAIL_SUBJECT: ${{ inputs.mail_subject }}
         GITHUB_REPOSITORY: ${{ github.repository }}
         GITHUB_EVENT_NAME: ${{ github.event_name }}
         GITHUB_EVENT_PATH: ${{ github.event_path }}
       run: node "$GITHUB_ACTION_PATH/src/handleReminder.js"
+    - name: Send reminder mail
+      if: ${{ inputs.mail_server_address != '' && steps.handle-reminder.outputs.mail_body != '' }}
+      uses: dawidd6/action-send-mail@v3
+      with:
+        server_address: ${{ inputs.mail_server_address }}
+        server_port: ${{ inputs.mail_server_port }}
+        secure: ${{ inputs.mail_secure }}
+        username: ${{ inputs.mail_username }}
+        password: ${{ inputs.mail_password }}
+        subject: ${{ steps.handle-reminder.outputs.mail_subject }}
+        to: ${{ inputs.mail_to }}
+        from: ${{ inputs.mail_from }}
+        body: ${{ steps.handle-reminder.outputs.mail_body }}
+        html_body: ${{ steps.handle-reminder.outputs.mail_html_body }}

@@ -3,8 +3,11 @@
 const fs = require('node:fs');
 
 const usedLabels = [];
+const overdueItems = new Map(); // issue.number -> { title, url, dueTs }
 const token = process.env.INPUT_GITHUB_TOKEN;
 const repository = process.env.GITHUB_REPOSITORY;
+const mailServerAddress = process.env.INPUT_MAIL_SERVER_ADDRESS || '';
+const mailSubjectInput = process.env.INPUT_MAIL_SUBJECT || '';
 
 if (!token) {
     throw new Error('Input "github-token" is required');
@@ -19,6 +22,46 @@ const [owner, repo] = repository.split('/');
 function formatDate(ts) {
     const date = new Date(ts);
     return `${date.getDate()}.${date.getMonth() + 1}.${date.getFullYear()}`;
+}
+
+function escapeHtml(text) {
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function addOverdueItem(issue, dueTs) {
+    const existing = overdueItems.get(issue.number);
+    if (!existing || dueTs < existing.dueTs) {
+        overdueItems.set(issue.number, { title: issue.title, url: issue.html_url, dueTs });
+    }
+}
+
+function generateEmailReport() {
+    const sortedItems = [...overdueItems.values()].sort((a, b) => a.dueTs - b.dueTs);
+    const subject = mailSubjectInput || `[iobroker-bot] reminder for repository ${owner}/${repo}`;
+
+    const plainLines = ['Overdue Issues and Pull Requests:', ''];
+    for (const item of sortedItems) {
+        plainLines.push(`- ${item.title} (${item.url}) (due: ${formatDate(item.dueTs)})`);
+    }
+    const plainBody = plainLines.join('\n');
+
+    const htmlItems = sortedItems
+        .map(item => `  <li><a href="${item.url}">${escapeHtml(item.title)}</a> (due: ${formatDate(item.dueTs)})</li>`)
+        .join('\n');
+    const htmlBody = `<h2>Overdue Issues and Pull Requests</h2>\n<ul>\n${htmlItems}\n</ul>`;
+
+    const githubOutput = process.env.GITHUB_OUTPUT;
+    if (githubOutput) {
+        const delimiter = `ghadelimiter_${Date.now()}`;
+        fs.appendFileSync(githubOutput, `mail_subject<<${delimiter}\n${subject}\n${delimiter}\n`);
+        fs.appendFileSync(githubOutput, `mail_body<<${delimiter}\n${plainBody}\n${delimiter}\n`);
+        fs.appendFileSync(githubOutput, `mail_html_body<<${delimiter}\n${htmlBody}\n${delimiter}\n`);
+        console.log(`    email report prepared with ${sortedItems.length} overdue item(s)`);
+    }
 }
 
 async function githubRequest(method, path, body) {
@@ -219,6 +262,7 @@ async function handleBrandNew(issues) {
                         console.log(`    should be merged now (deadline ${dateStr})`);
                         await updateLabel(label, `remind after ${dateStr}`, 'ff0000');
                         await addLabel(issue.number, ['⚠️check']);
+                        addOverdueItem(issue, targetTs);
                     }
                 }
                 found = true;
@@ -242,6 +286,7 @@ async function handleBrandNew(issues) {
                         console.log(`    should be checked now (deadline ${dateStr})`);
                         await updateLabel(label, `remind after ${dateStr}`, 'ff0000');
                         await addLabel(issue.number, ['⚠️check']);
+                        addOverdueItem(issue, targetTs);
                     }
                 }
                 found = true;
@@ -278,6 +323,7 @@ async function handleOthers(issues) {
                     } else {
                         console.log(`    should be checked now (deadline ${dateStr})`);
                         await updateLabel(label, `remind after ${dateStr}`, 'ff0000');
+                        addOverdueItem(issue, targetTs);
                     }
                 }
             }
@@ -314,6 +360,12 @@ async function run() {
     } else {
         console.log('checking for outdated labels');
         await cleanupLabels();
+    }
+
+    if (!prID && mailServerAddress && overdueItems.size > 0) {
+        console.log('');
+        console.log('generating email report');
+        generateEmailReport();
     }
 }
 
